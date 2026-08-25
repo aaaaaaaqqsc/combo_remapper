@@ -1,7 +1,7 @@
 # Combo Remapper (AutoHotkey v2)
 
 Turns "hold two keys at once" combos into a single key press. Also supports simple single-key-to-mouse-action triggers. Made for accessibility — if pressing multiple buttons together is hard, this does it for you.
-
+  Warning. This was made with artificial intelligence because I am disabled, and I can't develop because of my hands. I know how. I just can't. I'm sorry. But if you have this project, help this project. You can help.
 ## Requirements
 - **AutoHotkey v2** (not v1) — download from https://www.autohotkey.com/
 - 
