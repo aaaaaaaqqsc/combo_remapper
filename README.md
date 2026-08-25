@@ -45,3 +45,4 @@ Save the file and re-run it (or right-click the tray icon → Reload Script) for
 ## Notes
 - Windows may flag AutoHotkey scripts with a antivirus warning — this is common for all AHK scripts, not just this one, since they can simulate keypresses. You can allow it if you trust the source.
 - If you're also running the lockpicking mouse-circle script at the same time, both can run together safely — they don't share any keys.
+{https://youtu.be/6qu_r_OrRcw}
