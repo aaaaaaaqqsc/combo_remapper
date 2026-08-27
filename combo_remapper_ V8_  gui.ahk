@@ -1,11 +1,11 @@
 ; ============================================================
-; Combo Remapper — v8.0 GUI VERSION (STABLE FIXED EDITION)
+; Combo Remapper — v8.0 GUI VERSION (WITH FULL SETTINGS PANEL)
 ; Multi-purpose Engine (PCSX2, Emulators, Games, Productivity)
 ; ============================================================
 #Requires AutoHotkey v2.0
 
 #SingleInstance Force
-SendMode("Event")
+SendMode("Input")
 
 OnExit(HandleExit)
 
@@ -46,7 +46,6 @@ targetExe := ""            ; Executable filter for profile (e.g., "pcsx2-qt.exe"
 heldCombos := Map()        ; hold/turbo mode state tracking
 toggleActive := Map()      ; toggle-mode state tracking
 pressLatched := Map()      ; press-mode state tracking
-global turboTimers := Map() ; turbo-mode timer instance tracking
 
 registeredRowTriggers := []
 registeredScrollKey := ""
@@ -110,14 +109,6 @@ GetProfileList() {
     return list.Length ? list : ["default"]
 }
 
-GetProfileIndex(name, list) {
-    for idx, item in list {
-        if (StrLower(item) = StrLower(name))
-            return idx
-    }
-    return 1
-}
-
 NotifyUser(msg, duration := -1000) {
     global showTooltips, soundAlerts
     if (soundAlerts)
@@ -163,7 +154,7 @@ LoadState() {
     ]
 
     rowCount := 5
-    try rowCount := Integer(IniRead(configFile, "Meta", "RowCount", "5"))
+    try rowCount := Integer(IniRead(configFile, "Meta", "RowCount", 5))
     if (rowCount < 0)
         rowCount := 0
 
@@ -198,9 +189,9 @@ LoadState() {
     Themes["Custom Image"]["img"] := customImg
 
     ; Advanced Settings Load
-    try keyDelayDuration := Integer(IniRead(configFile, "Settings", "KeyDelayDuration", "20"))
-    try keyDelayPress := Integer(IniRead(configFile, "Settings", "KeyDelayPress", "20"))
-    try mouseDelayDuration := Integer(IniRead(configFile, "Settings", "MouseDelayDuration", "10"))
+    try keyDelayDuration := Integer(IniRead(configFile, "Settings", "KeyDelayDuration", 20))
+    try keyDelayPress := Integer(IniRead(configFile, "Settings", "KeyDelayPress", 20))
+    try mouseDelayDuration := Integer(IniRead(configFile, "Settings", "MouseDelayDuration", 10))
     try soundAlerts := (IniRead(configFile, "Settings", "SoundAlerts", "1") = "1")
     try showTooltips := (IniRead(configFile, "Settings", "ShowTooltips", "1") = "1")
     try customBgColor := IniRead(configFile, "Settings", "CustomBgColor", "1E1E1E")
@@ -329,20 +320,17 @@ ExecuteComboSequence(keysArray) {
         if IsNumber(k) {
             Sleep(Integer(k))
         } else {
-            SendEvent "{" k " down}"
+            Send "{" k " down}"
             Sleep(20)
-            SendEvent "{" k " up}"
+            Send "{" k " up}"
         }
     }
 }
 
 FireTurbo(triggerKey) {
-    global heldCombos, scriptEnabled, turboTimers
+    global heldCombos, scriptEnabled
     if (!scriptEnabled || !heldCombos.Has(triggerKey)) {
-        if turboTimers.Has(triggerKey) {
-            SetTimer(turboTimers[triggerKey], 0)
-            turboTimers.Delete(triggerKey)
-        }
+        SetTimer(, 0)
         return
     }
     row := FindRow(triggerKey)
@@ -351,7 +339,7 @@ FireTurbo(triggerKey) {
 }
 
 HandlePress(triggerKey, *) {
-    global scriptEnabled, heldCombos, toggleActive, pressLatched, targetExe, turboTimers
+    global scriptEnabled, heldCombos, toggleActive, pressLatched, targetExe
     if (!scriptEnabled)
         return
     if (targetExe != "" && !WinActive("ahk_exe " . targetExe))
@@ -365,9 +353,7 @@ HandlePress(triggerKey, *) {
         if (heldCombos.Has(triggerKey))
             return
         heldCombos[triggerKey] := true
-        fn := FireTurbo.Bind(triggerKey)
-        turboTimers[triggerKey] := fn
-        SetTimer(fn, 60)
+        SetTimer(FireTurbo.Bind(triggerKey), 60)
     } else if (row.mode = "press") {
         if (pressLatched.Has(triggerKey))
             return  
@@ -382,13 +368,13 @@ HandlePress(triggerKey, *) {
         if (!isActive) {
             for k in row.keys {
                 if !IsNumber(k)
-                    try SendEvent "{" k " down}"
+                    try Send "{" k " down}"
             }
             toggleActive[triggerKey] := true
         } else {
             for k in row.keys {
                 if !IsNumber(k)
-                    try SendEvent "{" k " up}"
+                    try Send "{" k " up}"
             }
             toggleActive[triggerKey] := false
         }
@@ -398,13 +384,13 @@ HandlePress(triggerKey, *) {
         heldCombos[triggerKey] := true
         for k in row.keys {
             if !IsNumber(k)
-                try SendEvent "{" k " down}"
+                try Send "{" k " down}"
         }
     }
 }
 
 HandleRelease(triggerKey, *) {
-    global scriptEnabled, heldCombos, pressLatched, targetExe, turboTimers
+    global scriptEnabled, heldCombos, pressLatched, targetExe
     if (!scriptEnabled)
         return
     if (targetExe != "" && !WinActive("ahk_exe " . targetExe))
@@ -416,10 +402,6 @@ HandleRelease(triggerKey, *) {
 
     if (row.mode = "turbo") {
         heldCombos.Delete(triggerKey)
-        if turboTimers.Has(triggerKey) {
-            SetTimer(turboTimers[triggerKey], 0)
-            turboTimers.Delete(triggerKey)
-        }
     } else if (row.mode = "toggle" || row.mode = "press") {
         pressLatched.Delete(triggerKey)
     } else {
@@ -428,7 +410,7 @@ HandleRelease(triggerKey, *) {
         heldCombos.Delete(triggerKey)
         for k in row.keys {
             if !IsNumber(k)
-                try SendEvent "{" k " up}"
+                try Send "{" k " up}"
         }
     }
 }
@@ -464,18 +446,13 @@ ToggleScript(*) {
 RegisterPanicHotkey()
 
 ReleaseAllHeldCombos() {
-    global heldCombos, toggleActive, pressLatched, turboTimers
-    for triggerKey, fn in turboTimers.Clone() {
-        SetTimer(fn, 0)
-    }
-    turboTimers := Map()
-
+    global heldCombos, toggleActive, pressLatched
     for triggerKey in heldCombos.Clone() {
         row := FindRow(triggerKey)
         if (row != "") {
             for k in row.keys {
                 if !IsNumber(k)
-                    try SendEvent "{" k " up}"
+                    try Send "{" k " up}"
             }
         }
     }
@@ -487,7 +464,7 @@ ReleaseAllHeldCombos() {
             if (row != "") {
                 for k in row.keys {
                     if !IsNumber(k)
-                        try SendEvent "{" k " up}"
+                        try Send "{" k " up}"
                 }
             }
         }
@@ -503,41 +480,22 @@ HandleExit(*) {
 ; ---- Auto-Profile Switcher Engine ----
 SetTimer(AutoSwitchProfilesWatcher, 1200)
 
-HasTargetExe(profName) {
-    global profilesDir
-    try {
-        tExe := IniRead(profilesDir "\" profName ".ini", "Meta", "TargetExe", "")
-        return (tExe != "" && tExe != "(any)")
-    }
-    return false
-}
-
 AutoSwitchProfilesWatcher() {
     global currentProfile, profilesDir, profileDD, myGui
     if (myGui = "" || !WinExist(myGui))
         return
         
-    pList := GetProfileList()
-    matchedProf := ""
-
     loop files, profilesDir "\*.ini" {
         profName := StrReplace(A_LoopFileName, ".ini", "")
+        if (profName = currentProfile)
+            continue
+            
         tExe := IniRead(A_LoopFileFullPath, "Meta", "TargetExe", "")
         if (tExe != "" && tExe != "(any)" && WinActive("ahk_exe " . tExe)) {
-            matchedProf := profName
-            break
-        }
-    }
-
-    if (matchedProf != "" && matchedProf != currentProfile) {
-        profileDD.Choose(GetProfileIndex(matchedProf, pList))
-        SwitchProfile(profileDD)
-        NotifyUser("Auto-Switched Profile: " . matchedProf, -1500)
-    } else if (matchedProf = "" && currentProfile != "default" && HasTargetExe(currentProfile)) {
-        if GetProfileIndex("default", pList) {
-            profileDD.Choose(GetProfileIndex("default", pList))
+            profileDD.Choose(profName)
             SwitchProfile(profileDD)
-            NotifyUser("Auto-Switched Profile: default", -1500)
+            NotifyUser("Auto-Switched Profile: " . profName, -1500)
+            break
         }
     }
 }
@@ -546,27 +504,18 @@ AutoSwitchProfilesWatcher() {
 ; AUTO KEY RECORDER & CAPTURE ENGINE
 ; ============================================================
 CaptureSingleKey(targetEditControl) {
-    static singleHook := ""
-    if (singleHook)
-        singleHook.Stop()
-
-    singleHook := InputHook("V L1 Timeout5")
+    ih := InputHook("V L1 Timeout5")
     NotifyUser("Press any key to bind...", -3000)
-    singleHook.OnKeyDown := (hook, vk, sc) => (
+    ih.OnKeyDown := (hook, vk, sc) => (
         keyName := GetKeyName(Format("vk{:x}sc{:x}", vk, sc)),
         targetEditControl.Text := keyName,
-        NotifyUser("Bound key: " . keyName),
-        hook.Stop()
+        NotifyUser("Bound key: " . keyName)
     )
-    singleHook.Start()
+    ih.Start()
 }
 
 StartKeyRecorder(slotIdx, *) {
     global rowUI, registeredRowTriggers
-    static recHook := ""
-    if (recHook)
-        recHook.Stop()
-
     targetTrigger := StrLower(Trim(rowUI[slotIdx].tb.Text))
     targetCB := rowUI[slotIdx].cb
     targetBtn := rowUI[slotIdx].autoBtn
@@ -582,10 +531,10 @@ StartKeyRecorder(slotIdx, *) {
     recordedKeys := Map()
     keyList := []
     
-    recHook := InputHook("V L0 Timeout5")
-    recHook.KeyOpt("{All}", "+N")
+    ih := InputHook("V L0 Timeout5")
+    ih.KeyOpt("{All}", "+N")
     
-    recHook.OnKeyDown := (hook, vk, sc) => (
+    ih.OnKeyDown := (hook, vk, sc) => (
         keyName := StrLower(GetKeyName(Format("vk{:x}sc{:x}", vk, sc))),
         (keyName != "" && keyName != targetTrigger && !recordedKeys.Has(keyName)) ? (
             recordedKeys[keyName] := true,
@@ -594,7 +543,7 @@ StartKeyRecorder(slotIdx, *) {
         ) : 0
     )
 
-    recHook.OnEnd := (*) => (
+    ih.OnEnd := (*) => (
         targetBtn.Text := "Auto",
         targetBtn.Enabled := true,
         RegisterRowHotkeys(),
@@ -602,7 +551,7 @@ StartKeyRecorder(slotIdx, *) {
     )
     
     NotifyUser("Recording inputs for 5s...", -5000)
-    recHook.Start()
+    ih.Start()
 }
 
 ; ============================================================
@@ -622,13 +571,12 @@ BuildGUI() {
 
     OnMessage(0x020A, OnMouseWheel)
 
-    ; Top Bar Controls
+    ; Top Bar Controls (Fixed Baseline Alignment)
     t1 := myGui.Add("Text", "x12 y12 w50 h24 +0x200 +BackgroundTrans", "Profile:")
     textControls.Push(t1)
     
-    profileList := GetProfileList()
-    profileDD := myGui.Add("DropDownList", "x65 y12 w85", profileList)
-    profileDD.Choose(GetProfileIndex(currentProfile, profileList))
+    profileDD := myGui.Add("DropDownList", "x65 y12 w85", GetProfileList())
+    profileDD.Choose(currentProfile)
     profileDD.OnEvent("Change", SwitchProfile)
 
     newProfBtn := myGui.Add("Button", "x155 y11 w42 h24", "+ New")
@@ -644,7 +592,7 @@ BuildGUI() {
     textControls.Push(t2)
     
     themeDD := myGui.Add("DropDownList", "x370 y12 w85", ["Dark", "Light", "Custom Image"])
-    themeDD.Choose(currentTheme = "Light" ? 2 : (currentTheme = "Custom Image" ? 3 : 1))
+    themeDD.Choose(currentTheme)
     themeDD.OnEvent("Change", ChangeTheme)
 
     ; Column Headers
@@ -721,6 +669,7 @@ OpenSettingsPanel(*) {
     settingsGui := Gui("+Owner" . myGui.Hwnd . " +ToolWindow", "Remapper Settings Panel")
     settingsGui.SetFont("s9")
 
+    ; Engine Delay Group
     settingsGui.Add("GroupBox", "xm ym w340 h115", "Engine Delay & Speed (ms)")
     settingsGui.Add("Text", "x20 yp+28 w120", "Key Delay:")
     kdEdit := settingsGui.Add("Edit", "x150 yp-3 w60", keyDelayDuration)
@@ -731,11 +680,13 @@ OpenSettingsPanel(*) {
     settingsGui.Add("Text", "x20 y+12 w120", "Mouse Delay:")
     mdEdit := settingsGui.Add("Edit", "x150 yp-3 w60", mouseDelayDuration)
 
+    ; System & Notifications Group
     settingsGui.Add("GroupBox", "xm y+20 w340 h95", "System & Notifications")
     autoStartCB := settingsGui.Add("Checkbox", "x20 yp+25 " . (IsAutoStartEnabled() ? "Checked" : ""), "Auto-Start with Windows Startup")
     soundCB := settingsGui.Add("Checkbox", "x20 y+8 " . (soundAlerts ? "Checked" : ""), "Enable Audio Beep Alerts")
     tooltipCB := settingsGui.Add("Checkbox", "x20 y+8 " . (showTooltips ? "Checked" : ""), "Enable Overlay ToolTips")
 
+    ; Custom Theme Group (Fixed Absolute Offset Pattern)
     settingsGui.Add("GroupBox", "xm y+20 w340 h115", "Custom RGB Theme Pickers (HEX)")
     settingsGui.Add("Text", "x20 yp+28 w130", "Window Background:")
     bgHexEdit := settingsGui.Add("Edit", "x150 yp-3 w70", customBgColor)
@@ -789,6 +740,7 @@ OpenSettingsPanel(*) {
 ; ============================================================
 OpenOptionsMenu(slotIdx, *) {
     global rowUI
+
     targetCB := rowUI[slotIdx].cb
 
     rowMenu := Menu()
@@ -918,7 +870,7 @@ ChangeTheme(ctrl, *) {
         if (selectedImg != "") {
             Themes["Custom Image"]["img"] := selectedImg
         } else if (Themes["Custom Image"]["img"] = "" || !FileExist(Themes["Custom Image"]["img"])) {
-            ctrl.Choose(currentTheme = "Light" ? 2 : (currentTheme = "Custom Image" ? 3 : 1))
+            ctrl.Choose(currentTheme)
             return
         }
     }
@@ -956,7 +908,7 @@ SwitchProfile(ctrl, *) {
     targetExeBox.Text := targetExe
 
     if (themeDD != "") {
-        themeDD.Choose(currentTheme = "Light" ? 2 : (currentTheme = "Custom Image" ? 3 : 1))
+        themeDD.Choose(currentTheme)
         ApplyTheme(currentTheme)
     }
 
@@ -979,13 +931,12 @@ CreateNewProfile(*) {
         SyncBoxesToRows()
         SaveStateToINI(newPath)
         
-        pList := GetProfileList()
         profileDD.OnEvent("Change", SwitchProfile, 0)
         profileDD.Delete()
-        profileDD.Add(pList)
+        profileDD.Add(GetProfileList())
         profileDD.OnEvent("Change", SwitchProfile, 1)
 
-        profileDD.Choose(GetProfileIndex(newName, pList))
+        profileDD.Choose(newName)
         SwitchProfile(profileDD)
     }
 }
@@ -1032,7 +983,7 @@ DeleteProfile(*) {
     newList := GetProfileList()
     profileDD.Delete()
     profileDD.Add(newList)
-    profileDD.Choose(GetProfileIndex(currentProfile, newList))
+    profileDD.Choose(currentProfile)
     profileDD.OnEvent("Change", SwitchProfile, 1)
 
     rows := []
@@ -1058,10 +1009,7 @@ DeleteProfile(*) {
 ; GUI EVENT HANDLERS
 ; ============================================================
 OnMouseWheel(wParam, lParam, msg, hwnd) {
-    global myGui, scrollOffset, rows, VISIBLE_ROWS
-    if (myGui = "" || hwnd != myGui.Hwnd)
-        return
-
+    global scrollOffset, rows, VISIBLE_ROWS
     total := rows.Length
     maxOffset := Max(0, total - VISIBLE_ROWS)
     if (maxOffset <= 0)
@@ -1246,7 +1194,7 @@ ApplyChanges(*) {
 
     SaveStateToINI(configFile)
 
-    RenderAll(true)
+    UpdateToggleButton()
     NotifyUser("Combos updated and saved")
 }
 
